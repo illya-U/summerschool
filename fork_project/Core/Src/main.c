@@ -25,10 +25,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "baro.h"
+#include <malloc.h>
+//#include "lcd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
-typedef StaticSemaphore_t osStaticSemaphoreDef_t;
 /* USER CODE BEGIN PTD */
 
 
@@ -46,38 +47,48 @@ typedef StaticSemaphore_t osStaticSemaphoreDef_t;
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+SPI_HandleTypeDef hspi1;
+
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
 
-/* Definitions for taskLEDBlink */
-osThreadId_t taskLEDBlinkHandle;
-const osThreadAttr_t taskLEDBlink_attributes = {
-  .name = "taskLEDBlink",
-  .stack_size = 128 * 4,
+/* Definitions for task_take_raw_s */
+osThreadId_t task_take_raw_sHandle;
+const osThreadAttr_t task_take_raw_s_attributes = {
+  .name = "task_take_raw_s",
+  .stack_size = 1000 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for taskButtonRead */
-osThreadId_t taskButtonReadHandle;
-const osThreadAttr_t taskButtonRead_attributes = {
-  .name = "taskButtonRead",
-  .stack_size = 128 * 4,
+/* Definitions for task_showing */
+osThreadId_t task_showingHandle;
+const osThreadAttr_t task_showing_attributes = {
+  .name = "task_showing",
+  .stack_size = 1000 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for muxUART */
-osMutexId_t muxUARTHandle;
-const osMutexAttr_t muxUART_attributes = {
-  .name = "muxUART"
+/* Definitions for mutex */
+osMutexId_t mutexHandle;
+const osMutexAttr_t mutex_attributes = {
+  .name = "mutex"
 };
-/* Definitions for semButtonPressed */
-osSemaphoreId_t semButtonPressedHandle;
-osStaticSemaphoreDef_t semButtonPressedControlBlock;
-const osSemaphoreAttr_t semButtonPressed_attributes = {
-  .name = "semButtonPressed",
-  .cb_mem = &semButtonPressedControlBlock,
-  .cb_size = sizeof(semButtonPressedControlBlock),
+/* Definitions for MEANING_SEM */
+osSemaphoreId_t MEANING_SEMHandle;
+const osSemaphoreAttr_t MEANING_SEM_attributes = {
+  .name = "MEANING_SEM"
 };
 /* USER CODE BEGIN PV */
+
+struct list
+{
+	struct list* prev;
+	struct list* next;
+	int32_t temp;
+	int32_t pres;
+};
+
+struct list* begin = NULL;
+struct list* end = NULL;
 
 /* USER CODE END PV */
 
@@ -87,8 +98,9 @@ static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
-void StartTaskLEDBlink(void *argument);
-void StartTaskButtonRead(void *argument);
+static void MX_SPI1_Init(void);
+void start_task_take_raw_s(void *argument);
+void start_task_showing(void *argument);
 
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
@@ -96,6 +108,41 @@ void StartTaskButtonRead(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 char text[100];
+
+struct list* create_new_elem()
+{
+	struct list* new_elem = (struct list*)malloc(sizeof(struct list));
+	if(begin == NULL)
+	{
+		begin = new_elem;
+		end = new_elem;
+		new_elem->prev = NULL;
+		new_elem->next = NULL;
+		return new_elem;
+	}
+	begin->next = new_elem;
+	new_elem->prev = begin;
+	new_elem->next = NULL;
+	begin = new_elem;
+	return begin;
+}
+
+struct list* delete_elem()
+{
+	if(begin == end)
+	{
+		free(end);
+		begin = NULL;
+		end = NULL;
+		return NULL;
+	}
+	struct list* new_end = end->next;
+	new_end->prev = NULL;
+	free(end);
+	end = new_end;
+	return end;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -105,6 +152,7 @@ char text[100];
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -128,22 +176,23 @@ int main(void)
   MX_TIM3_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
   /* Create the mutex(es) */
-  /* creation of muxUART */
-  muxUARTHandle = osMutexNew(&muxUART_attributes);
+  /* creation of mutex */
+  mutexHandle = osMutexNew(&mutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
-  /* creation of semButtonPressed */
-  semButtonPressedHandle = osSemaphoreNew(1, 1, &semButtonPressed_attributes);
+  /* creation of MEANING_SEM */
+  MEANING_SEMHandle = osSemaphoreNew(5, 5, &MEANING_SEM_attributes);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
@@ -158,11 +207,11 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of taskLEDBlink */
-  taskLEDBlinkHandle = osThreadNew(StartTaskLEDBlink, NULL, &taskLEDBlink_attributes);
+  /* creation of task_take_raw_s */
+  task_take_raw_sHandle = osThreadNew(start_task_take_raw_s, NULL, &task_take_raw_s_attributes);
 
-  /* creation of taskButtonRead */
-  taskButtonReadHandle = osThreadNew(StartTaskButtonRead, NULL, &taskButtonRead_attributes);
+  /* creation of task_showing */
+  task_showingHandle = osThreadNew(start_task_showing, NULL, &task_showing_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -269,6 +318,44 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -364,12 +451,22 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, LCD_A0_Pin|LCD_RESET_Pin|LCD_CS_Pin, GPIO_PIN_SET);
+
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LCD_A0_Pin LCD_RESET_Pin LCD_CS_Pin */
+  GPIO_InitStruct.Pin = LCD_A0_Pin|LCD_RESET_Pin|LCD_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : BUTTON_Pin */
   GPIO_InitStruct.Pin = BUTTON_Pin;
@@ -386,7 +483,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  osSemaphoreRelease(semButtonPressedHandle);
+  //osSemaphoreRelease(semButtonPressedHandle);
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -394,50 +491,70 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartTaskLEDBlink */
+/* USER CODE BEGIN Header_start_task_take_raw_s */
 /**
-  * @brief  Function implementing the taskLEDBlink thread.
+  * @brief  Function implementing the task_take_raw_s thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartTaskLEDBlink */
-void StartTaskLEDBlink(void *argument)
+/* USER CODE END Header_start_task_take_raw_s */
+void start_task_take_raw_s(void *argument)
 {
   /* USER CODE BEGIN 5 */
+	if(baro_init() != BARO_OK)
+	{
+		snprintf(text,countof(text),"Error initialization barometr\n");
+		HAL_UART_Transmit(&huart1,(uint8_t*)text, strnlen(text,countof(text)),1000);
+		while(1){}
+	}
    /* Infinite loop */
    for(;;)
    {
-     osMutexAcquire(muxUARTHandle,osWaitForever);
-     char *text = "Task1 123!\n";
-     HAL_UART_Transmit(&huart1, (uint8_t*)text, strlen(text), 1000);
-     osMutexRelease(muxUARTHandle);
-     osDelay(pdMS_TO_TICKS(150));
-	   osDelay(50);
+	   osMutexAcquire(mutexHandle,osWaitForever);
+	   uint32_t size = osSemaphoreGetCount(MEANING_SEMHandle);
+	   if(size == 0)
+	   {
+		   osMutexRelease(mutexHandle);
+		   osDelay(pdMS_TO_TICKS(150));
+		   continue;
+	   }
+	   osSemaphoreAcquire(MEANING_SEMHandle,osWaitForever);
+	   struct list* lst = create_new_elem();
+	   lst->temp = baro_read_temp();
+	   lst->pres = baro_read_press();
+	   osMutexRelease(mutexHandle);
    }
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartTaskButtonRead */
+/* USER CODE BEGIN Header_start_task_showing */
 /**
-* @brief Function implementing the taskButtonRead thread.
+* @brief Function implementing the task_showing thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTaskButtonRead */
-void StartTaskButtonRead(void *argument)
+/* USER CODE END Header_start_task_showing */
+void start_task_showing(void *argument)
 {
-  /* USER CODE BEGIN StartTaskButtonRead */
+  /* USER CODE BEGIN start_task_showing */
   /* Infinite loop */
   for(;;)
   {
-      osMutexAcquire(muxUARTHandle, osWaitForever);
-      char *text = "2 Task 654!\n";
-      HAL_UART_Transmit(&huart1, (uint8_t*)text, strlen(text), 1000);
-      osMutexRelease(muxUARTHandle);
-
-      osDelay(pdMS_TO_TICKS(150));
+	 osMutexAcquire(mutexHandle,osWaitForever);
+	 if(osSemaphoreRelease(MEANING_SEMHandle) != osErrorResource)
+	 	 {
+		 	 snprintf(text,countof(text),"/*%ld.%02ld,%ld.%02ld*/\n",end->temp/100,end->temp%100,end->pres/100,end->pres%100);
+		 	 HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text,countof(text)),1000);
+		 	 delete_elem();
+		 	 osMutexRelease(mutexHandle);
+	 	 }
+		 else
+		 {
+			 osMutexRelease(mutexHandle);
+			 osDelay(pdMS_TO_TICKS(150));
+		 }
   }
-  /* USER CODE END StartTaskButtonRead */
+  /* USER CODE END start_task_showing */
 }
 
 /**
