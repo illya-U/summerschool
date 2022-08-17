@@ -29,8 +29,6 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
-typedef StaticSemaphore_t osStaticMutexDef_t;
-typedef StaticSemaphore_t osStaticSemaphoreDef_t;
 /* USER CODE BEGIN PTD */
 
 
@@ -48,6 +46,8 @@ typedef StaticSemaphore_t osStaticSemaphoreDef_t;
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+SPI_HandleTypeDef hspi1;
+
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
@@ -56,31 +56,25 @@ UART_HandleTypeDef huart1;
 osThreadId_t task_take_raw_sHandle;
 const osThreadAttr_t task_take_raw_s_attributes = {
   .name = "task_take_raw_s",
-  .stack_size = 200 * 4,
+  .stack_size = 1000 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for task_showing */
 osThreadId_t task_showingHandle;
 const osThreadAttr_t task_showing_attributes = {
   .name = "task_showing",
-  .stack_size = 200 * 4,
+  .stack_size = 1000 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for mutex */
 osMutexId_t mutexHandle;
-osStaticMutexDef_t mutexControlBlock;
 const osMutexAttr_t mutex_attributes = {
-  .name = "mutex",
-  .cb_mem = &mutexControlBlock,
-  .cb_size = sizeof(mutexControlBlock),
+  .name = "mutex"
 };
 /* Definitions for MEANING_SEM */
 osSemaphoreId_t MEANING_SEMHandle;
-osStaticSemaphoreDef_t MEANING_SEMControlBlock;
 const osSemaphoreAttr_t MEANING_SEM_attributes = {
-  .name = "MEANING_SEM",
-  .cb_mem = &MEANING_SEMControlBlock,
-  .cb_size = sizeof(MEANING_SEMControlBlock),
+  .name = "MEANING_SEM"
 };
 /* USER CODE BEGIN PV */
 
@@ -103,6 +97,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_SPI1_Init(void);
 void start_task_take_raw_s(void *argument);
 void start_task_showing(void *argument);
 
@@ -116,6 +111,14 @@ char text[100];
 struct list* create_new_elem()
 {
 	struct list* new_elem = (struct list*)malloc(sizeof(struct list));
+	if(begin == NULL)
+	{
+		begin = new_elem;
+		end = new_elem;
+		new_elem->prev = NULL;
+		new_elem->next = NULL;
+		return new_elem;
+	}
 	begin->next = new_elem;
 	new_elem->prev = begin;
 	new_elem->next = NULL;
@@ -125,6 +128,13 @@ struct list* create_new_elem()
 
 struct list* delete_elem()
 {
+	if(begin == end)
+	{
+		free(end);
+		begin = NULL;
+		end = NULL;
+		return NULL;
+	}
 	struct list* new_end = end->next;
 	new_end->prev = NULL;
 	free(end);
@@ -165,6 +175,7 @@ int main(void)
   MX_TIM3_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   /* USER CODE END 2 */
 
@@ -306,6 +317,44 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -401,12 +450,22 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, LCD_A0_Pin|LCD_RESET_Pin|LCD_CS_Pin, GPIO_PIN_SET);
+
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LCD_A0_Pin LCD_RESET_Pin LCD_CS_Pin */
+  GPIO_InitStruct.Pin = LCD_A0_Pin|LCD_RESET_Pin|LCD_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : BUTTON_Pin */
   GPIO_InitStruct.Pin = BUTTON_Pin;
@@ -455,7 +514,7 @@ void start_task_take_raw_s(void *argument)
 	   if(size == 0)
 	   {
 		   osMutexRelease(mutexHandle);
-		   //osDelay(pdMS_TO_TICKS(150));
+		   osDelay(pdMS_TO_TICKS(150));
 		   continue;
 	   }
 	   osSemaphoreAcquire(MEANING_SEMHandle,osWaitForever);
@@ -484,13 +543,15 @@ void start_task_showing(void *argument)
 	 if(osSemaphoreRelease(MEANING_SEMHandle) != osErrorResource)
 	 	 {
 		 	 snprintf(text,countof(text),"/*%ld.%02ld,%ld.%02ld*/\n",end->temp/100,end->temp%100,end->pres/100,end->pres%100);
+		 	 HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text,countof(text)),1000);
 		 	 delete_elem();
+		 	 osMutexRelease(mutexHandle);
 	 	 }
 		 else
 		 {
-			 //osDelay(pdMS_TO_TICKS(150));
+			 osMutexRelease(mutexHandle);
+			 osDelay(pdMS_TO_TICKS(150));
 		 }
-	 osMutexRelease(mutexHandle);
   }
   /* USER CODE END start_task_showing */
 }

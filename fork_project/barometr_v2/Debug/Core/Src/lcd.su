@@ -1,0 +1,2 @@
+../Core/Src/lcd.c:72:13:lcd_spi_send_mult	32	static
+../Core/Src/lcd.c:90:5:lcd_init	24	static
