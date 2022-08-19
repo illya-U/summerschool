@@ -2,11 +2,12 @@
  * lcd.h
  *
  *  Created on: Aug 17, 2022
- *      Author: Admin
+ *      Author: a
  */
 
 #ifndef INC_LCD_H_
 #define INC_LCD_H_
+
 #include "main.h"
 #include <stm32f4xx_hal.h>
 
@@ -108,7 +109,20 @@
 #define ST7735_YELLOW ST77XX_YELLOW
 #define ST7735_ORANGE ST77XX_ORANGE
 
-
 int lcd_init(void);
-
+int lcd_set_rotation(int m);
+void lcd_pixel(int16_t x, int16_t y, uint16_t color);
+void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
+void lcd_hline(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
+void lcd_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void lcd_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void lcd_fill(uint16_t color);
+void lcd_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+void lcd_circle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
+void lcd_fill_circle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
+void lcd_set_text_color(uint16_t color);
+void lcd_set_text_bg_color(uint16_t color);
+void lcd_char(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size_x, uint8_t size_y);
+void lcd_putchar(char c);
+void lcd_print(char *text);
 #endif /* INC_LCD_H_ */

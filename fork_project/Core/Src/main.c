@@ -26,6 +26,10 @@
 #include <string.h>
 #include "baro.h"
 #include <malloc.h>
+#include "lcd.h"
+//extern osMutexId_t muxLcd;
+//extern const osMutexAttr_t muxLcd_attributes;
+//#include "font.h"
 //#include "lcd.h"
 /* USER CODE END Includes */
 
@@ -48,6 +52,7 @@
 I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 TIM_HandleTypeDef htim3;
 
@@ -72,6 +77,21 @@ osMutexId_t mutexHandle;
 const osMutexAttr_t mutex_attributes = {
   .name = "mutex"
 };
+/* Definitions for muxLCD */
+osMutexId_t muxLCDHandle;
+const osMutexAttr_t muxLCD_attributes = {
+  .name = "muxLCD"
+};
+/* Definitions for init_Sem */
+osSemaphoreId_t init_SemHandle;
+const osSemaphoreAttr_t init_Sem_attributes = {
+  .name = "init_Sem"
+};
+/* Definitions for SemDMACplt */
+osSemaphoreId_t SemDMACpltHandle;
+const osSemaphoreAttr_t SemDMACplt_attributes = {
+  .name = "SemDMACplt"
+};
 /* Definitions for MEANING_SEM */
 osSemaphoreId_t MEANING_SEMHandle;
 const osSemaphoreAttr_t MEANING_SEM_attributes = {
@@ -79,22 +99,13 @@ const osSemaphoreAttr_t MEANING_SEM_attributes = {
 };
 /* USER CODE BEGIN PV */
 
-struct list
-{
-	struct list* prev;
-	struct list* next;
-	int32_t temp;
-	int32_t pres;
-};
-
-struct list* begin = NULL;
-struct list* end = NULL;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
@@ -108,40 +119,6 @@ void start_task_showing(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 char text[100];
-
-struct list* create_new_elem()
-{
-	struct list* new_elem = (struct list*)malloc(sizeof(struct list));
-	if(begin == NULL)
-	{
-		begin = new_elem;
-		end = new_elem;
-		new_elem->prev = NULL;
-		new_elem->next = NULL;
-		return new_elem;
-	}
-	begin->next = new_elem;
-	new_elem->prev = begin;
-	new_elem->next = NULL;
-	begin = new_elem;
-	return begin;
-}
-
-struct list* delete_elem()
-{
-	if(begin == end)
-	{
-		free(end);
-		begin = NULL;
-		end = NULL;
-		return NULL;
-	}
-	struct list* new_end = end->next;
-	new_end->prev = NULL;
-	free(end);
-	end = new_end;
-	return end;
-}
 
 /* USER CODE END 0 */
 
@@ -173,6 +150,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM3_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
@@ -186,11 +164,20 @@ int main(void)
   /* creation of mutex */
   mutexHandle = osMutexNew(&mutex_attributes);
 
+  /* creation of muxLCD */
+  muxLCDHandle = osMutexNew(&muxLCD_attributes);
+
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
+  /* creation of init_Sem */
+  init_SemHandle = osSemaphoreNew(1, 1, &init_Sem_attributes);
+
+  /* creation of SemDMACplt */
+  SemDMACpltHandle = osSemaphoreNew(1, 1, &SemDMACplt_attributes);
+
   /* creation of MEANING_SEM */
   MEANING_SEMHandle = osSemaphoreNew(5, 5, &MEANING_SEM_attributes);
 
@@ -215,10 +202,13 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+
+//  lcd_fill(ST);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
+//	 muxLcd = osMutexNew(&muxLcd_attributes);
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -434,6 +424,22 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -501,28 +507,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void start_task_take_raw_s(void *argument)
 {
   /* USER CODE BEGIN 5 */
-	if(baro_init() != BARO_OK)
-	{
-		snprintf(text,countof(text),"Error initialization barometr\n");
-		HAL_UART_Transmit(&huart1,(uint8_t*)text, strnlen(text,countof(text)),1000);
-		while(1){}
-	}
+	lcd_init();
+	lcd_fill(ST7735_BLACK);
+	osSemaphoreRelease(init_SemHandle);
    /* Infinite loop */
    for(;;)
    {
-	   osMutexAcquire(mutexHandle,osWaitForever);
-	   uint32_t size = osSemaphoreGetCount(MEANING_SEMHandle);
-	   if(size == 0)
-	   {
-		   osMutexRelease(mutexHandle);
-		   osDelay(pdMS_TO_TICKS(150));
-		   continue;
-	   }
-	   osSemaphoreAcquire(MEANING_SEMHandle,osWaitForever);
-	   struct list* lst = create_new_elem();
-	   lst->temp = baro_read_temp();
-	   lst->pres = baro_read_press();
-	   osMutexRelease(mutexHandle);
+	    osMutexAcquire(muxLCDHandle, osWaitForever);
+	    lcd_fill_circle(30, 30, 25, ST77XX_BLACK);
+	    osMutexRelease(muxLCDHandle);
+		osDelay(300);
+	    osMutexAcquire(muxLCDHandle, osWaitForever);
+		lcd_fill_circle(30, 30, 25, ST77XX_BLUE);
+		osMutexRelease(muxLCDHandle);
+		osDelay(300);
    }
   /* USER CODE END 5 */
 }
@@ -537,24 +535,20 @@ void start_task_take_raw_s(void *argument)
 void start_task_showing(void *argument)
 {
   /* USER CODE BEGIN start_task_showing */
+	osSemaphoreAcquire(init_SemHandle,osWaitForever);
   /* Infinite loop */
   for(;;)
   {
-	 osMutexAcquire(mutexHandle,osWaitForever);
-	 if(osSemaphoreRelease(MEANING_SEMHandle) != osErrorResource)
-	 	 {
-		 	 snprintf(text,countof(text),"/*%ld.%02ld,%ld.%02ld*/\n",end->temp/100,end->temp%100,end->pres/100,end->pres%100);
-		 	 HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text,countof(text)),1000);
-		 	 delete_elem();
-		 	 osMutexRelease(mutexHandle);
-	 	 }
-		 else
-		 {
-			 osMutexRelease(mutexHandle);
-			 osDelay(pdMS_TO_TICKS(150));
-		 }
-  }
+	    osMutexAcquire(muxLCDHandle, osWaitForever);
+	    lcd_fill_circle(80, 80, 30, ST77XX_BLACK);
+	    osMutexRelease(muxLCDHandle);
+		osDelay(200);
+		osMutexAcquire(muxLCDHandle, osWaitForever);
+		lcd_fill_circle(80, 80, 30, ST77XX_BLUE);
+		osMutexRelease(muxLCDHandle);
+		osDelay(200);
   /* USER CODE END start_task_showing */
+  }
 }
 
 /**
