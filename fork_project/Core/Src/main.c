@@ -22,41 +22,43 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
-#include <string.h>
 #include "baro.h"
-#include <malloc.h>
 #include "lcd.h"
-//extern osMutexId_t muxLcd;
-//extern const osMutexAttr_t muxLcd_attributes;
-//#include "font.h"
-//#include "lcd.h"
+#include <stdio.h>	// snprintf
+#include <string.h>	// memset
+#include <math.h>	// sin
+#include <stdlib.h>	// rand
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define countof(_a)	(sizeof(_a) / sizeof(_a[0]))
+#define UART_RX_BUF_SIZE	200
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define countof(_a) (sizeof(_a)/sizeof(_a[0]))
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
-DMA_HandleTypeDef hdma_spi1_tx;
 
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
 
 /* Definitions for task_take_raw_s */
 osThreadId_t task_take_raw_sHandle;
@@ -72,33 +74,19 @@ const osThreadAttr_t task_showing_attributes = {
   .stack_size = 1000 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for mutex */
-osMutexId_t mutexHandle;
-const osMutexAttr_t mutex_attributes = {
-  .name = "mutex"
+/* Definitions for muxUART */
+osMutexId_t muxUARTHandle;
+const osMutexAttr_t muxUART_attributes = {
+  .name = "muxUART"
 };
 /* Definitions for muxLCD */
 osMutexId_t muxLCDHandle;
 const osMutexAttr_t muxLCD_attributes = {
   .name = "muxLCD"
 };
-/* Definitions for init_Sem */
-osSemaphoreId_t init_SemHandle;
-const osSemaphoreAttr_t init_Sem_attributes = {
-  .name = "init_Sem"
-};
-/* Definitions for SemDMACplt */
-osSemaphoreId_t SemDMACpltHandle;
-const osSemaphoreAttr_t SemDMACplt_attributes = {
-  .name = "SemDMACplt"
-};
-/* Definitions for MEANING_SEM */
-osSemaphoreId_t MEANING_SEMHandle;
-const osSemaphoreAttr_t MEANING_SEM_attributes = {
-  .name = "MEANING_SEM"
-};
 /* USER CODE BEGIN PV */
-
+static uint8_t rx_buffer[UART_RX_BUF_SIZE];
+static uint8_t *rx_head = rx_buffer, *rx_tail = rx_buffer;
 
 /* USER CODE END PV */
 
@@ -110,15 +98,39 @@ static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_ADC1_Init(void);
 void start_task_take_raw_s(void *argument);
 void start_task_showing(void *argument);
 
 /* USER CODE BEGIN PFP */
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 char text[100];
+
+int __io_getchar(void) {
+	rx_head = &rx_buffer[UART_RX_BUF_SIZE - hdma_usart1_rx.Instance->NDTR];
+
+	while (rx_tail == rx_head) {
+		rx_head = &rx_buffer[UART_RX_BUF_SIZE - hdma_usart1_rx.Instance->NDTR];
+//		osDelay(1);
+	}
+
+	uint8_t b = *rx_tail;
+
+	if (++rx_tail == (rx_buffer + UART_RX_BUF_SIZE))
+//	if (++rx_tail == &rx_buffer[UART_RX_BUF_SIZE])
+		rx_tail = rx_buffer;
+
+	return (int)b;
+}
+
+int __io_putchar(int ch) {
+	HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, 100);
+	return 0;
+}
 
 /* USER CODE END 0 */
 
@@ -155,14 +167,50 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+
+  if (HAL_UART_Receive_DMA(&huart1, rx_buffer, sizeof(rx_buffer)) != HAL_OK) {
+	  snprintf(text, countof(text), "Error start UART RX %d\n", __LINE__);
+	  HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text, countof(text)), 1000);
+	  while (1) {}
+  }
+
+  snprintf(text, countof(text), "Start UART RX %d\n", __LINE__);
+  HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text, countof(text)), 1000);
+
+//  if (baro_init() != BARO_OK) {
+//	  snprintf(text, countof(text), "Error init baro\n");
+//	  HAL_UART_Transmit(&huart1, (uint8_t*)text, strnlen(text, countof(text)), 1000);
+//	  while (1) {}
+//  }
+
+//  for (uint16_t p = 0; p < 100; p++) {
+//	  lcd_pixel(p, p+0, ST7735_RED);
+//	  lcd_pixel(p, p+1, ST7735_GREEN);
+//	  lcd_pixel(p, p+2, ST7735_BLUE);
+//  }
+//
+//  lcd_fill_rect(10, 10, 50, 50, ST7735_CYAN);
+//  lcd_fill_rect(50, 50, 150, 150, ST7735_MAGENTA);
+//  lcd_rect(5, 5, 15, 15, ST77XX_ORANGE);
+//  lcd_rect(200, 200, 15, 15, ST77XX_ORANGE);
+//  lcd_line(13, 19, 37, 93, ST77XX_GREEN);
+//  lcd_line(13, 19, 93, 37, ST77XX_GREEN);
+//  lcd_circle(22, 55, 76, ST77XX_RED);
+//  lcd_fill_circle(33, 66, 19, ST77XX_BLUE);
+//  lcd_print("Hello LCD!");
+//  lcd_set_text_color(ST7735_CYAN);
+//  lcd_set_text_bg_color(ST7735_ORANGE);
+//  lcd_print("\nNew line!");
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
   /* Create the mutex(es) */
-  /* creation of mutex */
-  mutexHandle = osMutexNew(&mutex_attributes);
+  /* creation of muxUART */
+  muxUARTHandle = osMutexNew(&muxUART_attributes);
 
   /* creation of muxLCD */
   muxLCDHandle = osMutexNew(&muxLCD_attributes);
@@ -170,16 +218,6 @@ int main(void)
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
-
-  /* Create the semaphores(s) */
-  /* creation of init_Sem */
-  init_SemHandle = osSemaphoreNew(1, 1, &init_Sem_attributes);
-
-  /* creation of SemDMACplt */
-  SemDMACpltHandle = osSemaphoreNew(1, 1, &SemDMACplt_attributes);
-
-  /* creation of MEANING_SEM */
-  MEANING_SEMHandle = osSemaphoreNew(5, 5, &MEANING_SEM_attributes);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
@@ -202,13 +240,12 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-
-//  lcd_fill(ST);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
-//	 muxLcd = osMutexNew(&muxLcd_attributes);
+  lcd_init();
+
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -217,8 +254,13 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  printf("This text is from printf(), %d, %s, %s, %s\n", __LINE__, __FILE__, __FUNCTION__, __PRETTY_FUNCTION__);
+
   while (1)
   {
+	  int c = __io_getchar();
+	  HAL_UART_Transmit(&huart1, (uint8_t*)&c, 1, 1000);
+
 
     /* USER CODE END WHILE */
 
@@ -271,6 +313,58 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -433,9 +527,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA2_Stream3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
 
 }
 
@@ -489,10 +583,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  //osSemaphoreRelease(semButtonPressedHandle);
-}
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
 }
 
 /* USER CODE END 4 */
@@ -507,21 +597,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void start_task_take_raw_s(void *argument)
 {
   /* USER CODE BEGIN 5 */
-	lcd_init();
-	lcd_fill(ST7735_BLACK);
-	osSemaphoreRelease(init_SemHandle);
-   /* Infinite loop */
-   for(;;)
-   {
-	    osMutexAcquire(muxLCDHandle, osWaitForever);
-	    lcd_fill_circle(30, 30, 25, ST77XX_BLACK);
-	    osMutexRelease(muxLCDHandle);
-		osDelay(300);
-	    osMutexAcquire(muxLCDHandle, osWaitForever);
-		lcd_fill_circle(30, 30, 25, ST77XX_BLUE);
-		osMutexRelease(muxLCDHandle);
-		osDelay(300);
-   }
+  /* Infinite loop */
+  for(;;)
+  {
+	  osMutexAcquire(muxLCDHandle, osWaitForever);
+	  lcd_fill_circle(80, 80, 30, ST77XX_BLACK);
+	  osMutexRelease(muxLCDHandle);
+	  osDelay(300);
+
+	  osMutexAcquire(muxLCDHandle, osWaitForever);
+	  lcd_fill_circle(80, 80, 30, ST77XX_RED);
+	  osMutexRelease(muxLCDHandle);
+	  osDelay(300);
+  }
   /* USER CODE END 5 */
 }
 
@@ -535,20 +623,12 @@ void start_task_take_raw_s(void *argument)
 void start_task_showing(void *argument)
 {
   /* USER CODE BEGIN start_task_showing */
-	osSemaphoreAcquire(init_SemHandle,osWaitForever);
   /* Infinite loop */
   for(;;)
   {
-	    osMutexAcquire(muxLCDHandle, osWaitForever);
-	    lcd_fill_circle(80, 80, 30, ST77XX_BLACK);
-	    osMutexRelease(muxLCDHandle);
-		osDelay(200);
-		osMutexAcquire(muxLCDHandle, osWaitForever);
-		lcd_fill_circle(80, 80, 30, ST77XX_BLUE);
-		osMutexRelease(muxLCDHandle);
-		osDelay(200);
-  /* USER CODE END start_task_showing */
+    osDelay(1);
   }
+  /* USER CODE END start_task_showing */
 }
 
 /**
