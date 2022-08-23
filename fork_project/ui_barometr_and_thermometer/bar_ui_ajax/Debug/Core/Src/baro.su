@@ -1,0 +1,3 @@
+../Core/Src/baro.c:21:13:baro_init	32	static
+../Core/Src/baro.c:77:9:baro_read_temp	48	static
+../Core/Src/baro.c:104:10:baro_read_press	352	static
