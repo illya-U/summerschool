@@ -38,34 +38,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := base_ss
+BUILD_ARTIFACT_NAME := bar_ui_ajax
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-base_ss.elf \
+bar_ui_ajax.elf \
 
 MAP_FILES += \
-base_ss.map \
+bar_ui_ajax.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-base_ss.list \
+bar_ui_ajax.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: base_ss.elf secondary-outputs
+main-build: bar_ui_ajax.elf secondary-outputs
 
 # Tool invocations
-base_ss.elf base_ss.map: $(OBJS) $(USER_OBJS) C:\kurs_ajax\my_summer_school\summerschool\fork_project\STM32F401CCUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "base_ss.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\kurs_ajax\my_summer_school\summerschool\fork_project\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="base_ss.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+bar_ui_ajax.elf bar_ui_ajax.map: $(OBJS) $(USER_OBJS) C:\ui_bar_ajax\bar_ui_ajax\STM32F401CCUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "bar_ui_ajax.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\ui_bar_ajax\bar_ui_ajax\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bar_ui_ajax.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -74,14 +74,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-base_ss.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "base_ss.list"
+bar_ui_ajax.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "bar_ui_ajax.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) base_ss.elf base_ss.list base_ss.map default.size.stdout
+	-$(RM) bar_ui_ajax.elf bar_ui_ajax.list bar_ui_ajax.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)
