@@ -21,3 +21,5 @@
 ../Core/Src/lcd.c:394:6:lcd_char	40	static
 ../Core/Src/lcd.c:430:6:lcd_putchar	48	static
 ../Core/Src/lcd.c:444:6:lcd_print	16	static
+../Core/Src/lcd.c:450:6:lcd_set_cursor	16	static
+../Core/Src/lcd.c:455:6:lcd_set_text_size	16	static

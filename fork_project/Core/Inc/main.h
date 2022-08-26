@@ -30,6 +30,8 @@ extern "C" {
 #include "stm32f4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
+#define FLAG_WIFI_RDY  0x0001
+#define FLAG_BARO_RDY  0x0002
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */

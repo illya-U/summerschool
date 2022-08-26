@@ -1,0 +1,11 @@
+../Core/Src/wifi_at.c:49:12:cmp_resp	24	static
+../Core/Src/wifi_at.c:64:6:StartTaskWiFiListen	40	static
+../Core/Src/wifi_at.c:97:5:wifi_init	24	static
+../Core/Src/wifi_at.c:184:5:wifi_set_mode	24	static
+../Core/Src/wifi_at.c:213:5:wifi_connect_to_ap	40	static
+../Core/Src/wifi_at.c:266:5:wifi_get_own_ip	56	static
+../Core/Src/wifi_at.c:314:5:wifi_multiple_conns	24	static
+../Core/Src/wifi_at.c:344:5:wifi_server	24	static
+../Core/Src/wifi_at.c:381:5:wifi_send	40	static
+../Core/Src/wifi_at.c:422:5:wifi_printf	28	static
+../Core/Src/wifi_at.c:433:5:wifi_close	24	static

@@ -110,6 +110,8 @@
 #define ST7735_ORANGE ST77XX_ORANGE
 
 int lcd_init(void);
+void lcd_set_cursor(int16_t x, int16_t y);
+void lcd_set_text_size(int16_t size_x, int16_t size_y);
 int lcd_set_rotation(int m);
 void lcd_pixel(int16_t x, int16_t y, uint16_t color);
 void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color);

@@ -1,0 +1,5 @@
+../Core/Src/streams.c:71:5:__io_getchar	24	static
+../Core/Src/streams.c:95:5:__io_putchar	24	static
+../Core/Src/streams.c:112:6:HAL_UART_TxCpltCallback	16	static
+../Core/Src/streams.c:122:6:HAL_UART_ErrorCallback	24	static
+../Core/Src/streams.c:159:6:streams_init	24	static

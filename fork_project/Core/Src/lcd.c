@@ -446,3 +446,13 @@ void lcd_print(char *text) {
 		lcd_putchar(*text++);
 	}
 }
+
+void lcd_set_cursor(int16_t x, int16_t y) {
+  cursor_x = x * textsize_x * 6;
+  cursor_y = y * textsize_y * 8;
+}
+
+void lcd_set_text_size(int16_t size_x, int16_t size_y) {
+  textsize_x = size_x;
+  textsize_y = size_y;
+}
